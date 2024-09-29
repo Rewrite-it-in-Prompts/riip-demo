@@ -1,0 +1,13 @@
+Your task is to write a Dockerfile. The base contents are given below.
+Add comments to explain what it does, and do not modify unless absolutely necessary:
+    FROM public.ecr.aws/sam/build-java17:latest AS workspace
+    WORKDIR /workdir
+    COPY pom.xml .
+    RUN mvn dependency:go-offline -B -Dorg.slf4j.simpleLogger.log.org.apache.maven.cli.transfer.Slf4jMavenTransferListener=warn
+    COPY . .
+    FROM workspace
+    RUN mvn verify -B -Dorg.slf4j.simpleLogger.log.org.apache.maven.cli.transfer.Slf4jMavenTransferListener=warn
+    RUN cp target/poodah-1.0-SNAPSHOT.jar target/poodah-1.0.jar
+    ENV SAM_CLI_TELEMETRY=0
+    RUN sam build
+    ENTRYPOINT ["sam", "deploy"]

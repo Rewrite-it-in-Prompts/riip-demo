@@ -1,0 +1,40 @@
+The prime factorization utility is a command-line tool designed to find and display the prime factors of any given positive integer. Its primary purpose is to provide a quick and efficient way for users to decompose numbers into their prime components.
+
+Key goals and requirements:
+1. Accept a single positive integer as input via command-line argument
+2. Calculate the prime factorization of the input number
+3. Display the prime factors in ascending order, with repetition for multiple occurrences
+4. Implement efficient algorithms for prime factorization
+5. Handle large numbers within reasonable time constraints
+6. Provide clear error messages for invalid inputs
+7. Ensure the utility is easy to use and understand
+
+Technical specifications:
+- Implement in Python 3.8+
+- Use efficient prime factorization algorithms (e.g., trial division for smaller numbers, more advanced methods for larger ones)
+- Optimize for speed and memory usage
+- Implement robust input validation and error handling
+- Provide clear and concise usage instructions
+- Ensure code is well-documented and follows PEP 8 style guidelines
+
+Anti-requirements and pitfalls to avoid:
+- Do not implement a graphical user interface
+- Avoid using external libraries for the core factorization logic
+- Do not attempt to factor extremely large numbers (e.g., those used in cryptography)
+- Avoid overengineering; keep the implementation simple and focused on the core functionality
+
+
+Implement the main entry point for the prime factorization utility. This file should:
+1. Parse command-line arguments
+2. Validate input
+3. Call the prime factorization function
+4. Display the results or error messages
+
+Public functions:
+- main(): The main entry point of the program
+- parse_arguments(): Parse and validate command-line arguments
+- display_results(factors: List[int]): Format and print the prime factors
+
+
+Target file: src/main.py
+

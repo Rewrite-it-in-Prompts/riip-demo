@@ -1,0 +1,28 @@
+#
+# Specifications for the "gen-2" code generator to rewrite itself in Go.
+# Requires Go compiler to be already installed locally. (https://go.dev/doc/install)
+#
+tasks:
+
+  - output-dir: ./gen-3/gen3go
+    max-retries: 0
+    prompt: |
+      Rewrite gen-2.py and llm_client.py in Golang to create gen-3.go.
+      Split it into 3 files: main, yaml, llm.
+      IMPORTANT: During the rewrite, remove all self-test related functionality from main and move it to a "_test".
+
+      Use only the following dependencies:
+        github.com/aws/aws-sdk-go-v2 v1.25.0
+        github.com/aws/aws-sdk-go-v2/config v1.26.2
+        github.com/aws/aws-sdk-go-v2/service/bedrockruntime v1.6.0
+        yaml "gopkg.in/yaml.v3" v3.0.1
+
+      Load base-prompt.json from 'C:\Users\alexr\git\riip-tools\core\base-prompt.json'
+
+      Include go.mod in the list of files to be created.
+
+    inputs: [ gen-2.py, llm_client.py ]
+    lang: go
+    pipeline:
+      - subprocess: [go, mod, tidy]
+      - subprocess: [go, test, ./...]

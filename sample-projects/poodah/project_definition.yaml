@@ -1,0 +1,98 @@
+vision: |
+
+  Poodah (Hadoop spelled backwards) is an AWS-native runtime for Map Reduce jobs.
+  It also rhymes with Poodle, a type of small, ugly dog.
+
+  Goals:
+  - Completely serverless (scale-to-zero, no recurring fees for idle compute resources)
+  - High degree of parallel execution
+  - Efficient incremental updates (avoid unnecessary re-computation)
+  - Simple AWS operations
+  - Hadoop-inspired Java APIs
+  - One-line deploy using standard SAM CLI: "sam deploy"
+
+  Simplifying assumptions:
+  - S3 in, S3 out, JSON only. 
+  - There are no "job IDs" - just a single ongoing job, process the files in the given s3/path as they arrive.
+  - Use DynamoDB for intermediate results. Use dynamo stream to trigger the reduce step.
+  - Consume from S3 in large batches of multiple objects, to minimize churn over intermediate results.
+  - Incremental processing is via S3 SNS trigger; full re-process is a manual trigger via AWS CLI.
+  - Leverage SAM to create the S3 bucket, SNS triggers, Lambdas, and CI/CD pipelines.
+  - 100% Java
+  - The Mapper and Reducer are wrapped in Lambda Functions
+  - AWS Lambda's automated retry mechanism is sufficient for our purposes
+  - CloudWatch is sufficient for logging, alerting, etc
+  - S3 and Lambda provide all needed scalability
+  - Security is at the AWS account level.
+  - There will be no user interaction: data lands in S3 and gets processed.
+  - No encryption beyond what's already provided by default
+  - No special handling for large files
+  - Integration Tests must use a localstack instance.
+  - Provide a sample implementation
+  - The pom should generate a library to be used by the actual application.
+
+  Detailed technical specifications - include these verbatim in the vision:
+  - Target Platform: AWS Lambda
+  - Application Framework: SAM
+  - Java version: 17 (please ensure template.yaml uses this version)
+  - AWS Java SDK Version: 2.26.8
+  - Use SDKv2 (package: software.amazon.awssdk) instead of SDKv1 (com.amazonaws.services) in the code.
+  - Relevant Hadoop APIs:
+          Class Mapper<KEYIN,VALUEIN,KEYOUT,VALUEOUT> ...
+          public void map(Object key, Text value, Context context);
+          Class Reducer<KEYIN,VALUEIN,KEYOUT,VALUEOUT> ...
+          public void reduce(KEYIN key, Iterable<VALUEIN> values, org.apache.hadoop.mapreduce.Reducer.Context context);
+  - Do not use any actual Hadoop APIs, just define our own per above. We're Hadoop-inspired, not Hadoop-compatible. Create additional Hadoop-like classes as needed, but only when strictly necessary.
+  - Do not add dependencies on Hadoop, EMR, etc
+  - Environment variables will be managed directly in the SAM template, self-generated wherever possible.
+  - DO NOT use Spring, Springboot, or any other similar heavy-handed frameworks.
+  - For the SAM Template, set Metadata: SkipBuild: True on every Lambda Function.
+
+workspace: ai-workspace/
+
+system: You are an expert System Architect.
+
+tasks:
+  - prompt: |
+      Please generate the project's README.md file. 
+      Assume that everything described in the vision has been implemented.
+      Write in the style of an IBM manual. License is GPLv3 with no free support.
+    target: OVERVIEW.md
+
+  - prompt: |
+      Your task is to write a Dockerfile. The base contents are given below.
+      Add comments to explain what it does, and do not modify unless absolutely necessary:
+        FROM public.ecr.aws/sam/build-java17:latest AS workspace
+        WORKDIR /workdir
+        COPY pom.xml .
+        RUN mvn dependency:go-offline -B -Dorg.slf4j.simpleLogger.log.org.apache.maven.cli.transfer.Slf4jMavenTransferListener=warn
+        COPY . .
+        FROM workspace
+        RUN mvn verify -B -Dorg.slf4j.simpleLogger.log.org.apache.maven.cli.transfer.Slf4jMavenTransferListener=warn
+        RUN cp target/poodah-1.0-SNAPSHOT.jar target/poodah-1.0.jar
+        ENV SAM_CLI_TELEMETRY=0
+        RUN sam build
+        ENTRYPOINT ["sam", "deploy"]
+    target: Dockerfile
+
+  - prompt: |
+
+      Your task is to generate a YAML file with several different sections to guide the development of the project.
+      
+      Start by generating a technical specification under the 'vision: |' key. 
+      The generated vision must include a description of how the various files relate, including, any interfaces, functions, and method signatures; explain in detail how the intermediate results will be processed.
+      Make sure the generated vision includes everything in the "Detailed technical specifications" section, and add any necessary clarifications to help junior team members understand what's being asked here.
+      Then, generate the complete list of files to implement the project.
+      This should be in YAML format as the key 'tasks:' which defines a list of 
+        prompt: the technical specifications for generating the file contents, including, all the public methods and function signatures to be implemented, with full explanation of the semantics for each.
+        target: the name of the output file
+        imports: [ "file1", "file2", ... ] include other files as context for the developer to review while working. Use the import key extensively to ensure the developer has all the context they need.            
+      Output the tasks in import-aware order, without dependencies on future files.
+      After the above list of tasks, provide the following additional lists under an 'addendum' key:
+        external_dependencies: An exhaustive and detailed list of all third-party APIs, libraries, and services that the project will depend on; itemize the specific operations, e.g. for S3,specify whether you need GetObject or PutObject.
+        internal_dependencies: A list of all files pointed to in the above `import` keys, itemizing which file(s) are importing it. For each importing file, list the specific symbols that need
+        to be exported from the imported file.
+
+      A Dockerfile has already been provided.
+    imports: [Dockerfile]
+    target: development_tasks.yaml

@@ -1,0 +1,20 @@
+Your task is to generate a YAML file with several different sections to guide the development of the project.
+
+Start with a 'vision: |' key containing a detailed description of the project, including the purpose, goals, and detailed requirements from above.
+Then, add detailed technical specifications. Add any necessary clarifications to help junior team members understand what's being asked here. Add anti-requirements, anti-goals, and pitfalls to avoid, to help keep things on track.
+
+Add a top-level 'system' key containing an LLM system prompt to guide the developer in generating the individual files that will implement the project.
+
+Then, generate the complete list of files to implement the project.
+This should be in YAML format as the key 'tasks:' which defines a list of 
+prompt: the technical specifications for generating the file contents, including, all the public methods and function signatures to be implemented, with full explanation of the semantics for each.
+target: the name of the output file
+imports: [ "file1", "file2", ... ] include other files as context for the developer to review while working. Use the import key extensively to ensure the developer has all the context they need.            
+Output the tasks in import-aware order, without dependencies on future files.
+
+All source files must have a corresponding unit test following these guidelines:
+- Unit Tests must be able to run without external connection, e.g. cloud, database, etc.
+- Focus on testing large pieces of functionality with each test, rather than smallest "units".
+- Don't allow tests to block waiting for user input; force them to fail fast.
+
+Paths are relative to the top-level project folder, do not add the project name again in the path.

@@ -1,0 +1,89 @@
+vision: |  
+  The code must follow the following guidelines where applicable:
+  - Add '..' to the python import path: `sys.path.append('..')` (required for llm_client import)
+  - All code must be production-ready without placeholders.
+  - Start the code with a large block comment explaining the purpose of the script and how it works, a Change Log starting with ' - 1.0: generated from prompt', mention the code was written by AI.
+  - Restrict all file I/O and set the default relative path to the workspace folder specified in the YAML, and if not specified, default to the directory where the YAML is located.
+  - Ensure folder paths exists before writing files.
+  - Call the LLM by using `from llm_client import invoke_model`;
+      invoke_model(prompt: str, system: str) -> Tuple[str, int, int];
+      invokes the LLM model with the given prompt and return the generated text and I/O token counts.    
+
+tasks:
+
+  - prompt: |
+      You are an automated Coding Assistant working on an automated Coding Assistant, using LLM (Large Language Model) Generative AI technology. Try not to get lost in the recursion.
+
+      Write a code generator which works with the YAML format below:
+      ---
+          vision: ... contains base LLM prompt ...
+          system: ... contains system prompt ...
+          workspace: ... path to workspace folder ...
+          tasks:
+              - prompt: ... task prompt ...
+                import: ... list of files to import (will be wrapped in <file path="..."> in prompt) ...
+                target: ... target file to write output ...
+          addendum: ... additional information to be appended to the prompt ...
+      ...
+
+      Make it possible to invoke your code via __main__ (CLI) or main() (from Python).
+      The generator will be written in Python but will be able to generate code in any language.
+      Skip processing tasks that have existing target files unless `-f [file1, file2, ...]` (match on absolute path) or `-f` is specified.     
+      Save every generated prompt to a '.prompt' file in the same folder as the target file.
+      Print a status to stderr for each prompt being executed, including in and out tokens, and time taken.
+      Output the token and time totals at the end.
+      
+    target: generator.py
+
+  - prompt: |
+      Your task: Generate a new script which will output a YAML formatted list of recommended fixes based on the build output.
+      The generated program should work as follows:
+      - The output will be in YAML format defined below.
+      - Assume all working files are located in ./$workspace/, so chdir into it for convenience.
+      - then execute `docker build --target workspace -t dev .`, discard stderr and stdout, ignore errors.
+      - then execute `docker build -t dev .`, capture stderr and stdout, ignore errors.
+      - Write a comprehensive report including the following (wrap files in <file path="..."> tags):
+        - The contents of the Dockerfile
+        - The contents of the package.json, requirements.txt, pom.xml, Cargo.toml, etc, whichever are present on the filesystem.
+        - The contents of all source files (*.java) under ./src/ and ./test/ directories.
+        - Lastly, the full build output wrapped in <build-output> tag.
+        - Write your detailed report to ./$workspace/build_review.out
+        - Then send that to the LLM, using the following guidelines for the prompt: ask the LLM to generate a YAML file with a list of recommended fixes (in 'prompt' key) for each file (in 'target' key), specifically fixes for actual failures; Skip general improvement and refactoring suggestions; Avoid renaming or moving things from one file or path to another, stick to the original structure; If something needs to be "ensured" in another file, make a separate "-target: ... prompt: | ..." entry to perform the ensuring in the corresponding other file(s); In case a new file needs to be created, specify the file name in the "target:" key; Omit files that do not require any changes; Omit tasks that are not able to reference a specific 'target:' file to be modified or created, e.g. do not create a "separate_task" file target; Omit general recommendations that are not specific to a file; Be sure to include full context and detailed instructions for the new junior developer; Tell the LLM to format the output as a YAML in this format:
+            vision:  |
+              ... full overview of the project and what's going on with the failed build ...
+              ... explain clearly to the new developers, what is going to get us closer to the end goal of the project ...
+            tasks:
+              - target: file1
+                prompt: |
+                  ...
+              - target: file2
+                prompt: |
+                  ...
+              ...
+            google_queries:
+              - "..."
+              - "..."
+              ... (list of Google queries to help the developer find additional root cause information for each error)
+        - Write this LLM output to the file specified in sys.argv[1] (mind the chdir)
+        - Specify full paths relative to '.' (which is $workspace), i.e. do not double-specify $workspace, and do not strip off other path elements besides $workspace or workdir.
+
+      Write to stderr the number of tokens in, tokens out, and time taken to complete the LLM call.
+      Don't forget to import json.
+
+    target: build_review.py
+
+  - prompt: |
+      Build a new script, "fix_errors.py" which does the following:
+      - The list of files to be processed is read from 'tasks' key in yaml file specified in argv[1]
+      Then for each target file:
+      - Assume paths are relative to the same directory as the yaml
+      - The previous prompt is read from the corresponding '.prompt' file
+      - The 'target' file contents are read and appended to the prompt, with the note "Here is a previous, failed attempt at implementing the task:"
+      - If the target file or prompt does not exist, append the note "This file does not exist yet. Please create it from scratch."
+      - The file-specific prompt from the list is appended with the note "Your new task is to rewrite the file to address the following:"
+      - End the prompt with "Please rewrite the file in its entirety. The human has difficulty typing, so please rewrite the entire file without leaving placeholders."
+      - If a ".bak" file exists, delete it before the next step.
+      - If the target file already exists, write a ".bak" file with the previous contents.
+      - Send all this to the LLM, then overwrite the target file and the prompt at their original locations.
+
+    target: fix_errors.py

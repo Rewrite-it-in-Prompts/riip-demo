@@ -1,0 +1,100 @@
+vision: |
+  The prime factorization utility is a command-line tool designed to find and display the prime factors of any given positive integer. Its primary purpose is to provide a quick and efficient way for users to decompose numbers into their prime components.
+
+  Key goals and requirements:
+  1. Accept a single positive integer as input via command-line argument
+  2. Calculate the prime factorization of the input number
+  3. Display the prime factors in ascending order, with repetition for multiple occurrences
+  4. Implement efficient algorithms for prime factorization
+  5. Handle large numbers within reasonable time constraints
+  6. Provide clear error messages for invalid inputs
+  7. Ensure the utility is easy to use and understand
+
+  Technical specifications:
+  - Implement in Python 3.8+
+  - Use efficient prime factorization algorithms (e.g., trial division for smaller numbers, more advanced methods for larger ones)
+  - Optimize for speed and memory usage
+  - Implement robust input validation and error handling
+  - Provide clear and concise usage instructions
+  - Ensure code is well-documented and follows PEP 8 style guidelines
+
+  Anti-requirements and pitfalls to avoid:
+  - Do not implement a graphical user interface
+  - Avoid using external libraries for the core factorization logic
+  - Do not attempt to factor extremely large numbers (e.g., those used in cryptography)
+  - Avoid overengineering; keep the implementation simple and focused on the core functionality
+
+system: |
+  You are an expert Python developer tasked with implementing a command-line utility for prime factorization. Your code should be efficient, well-documented, and adhere to best practices. Focus on creating a user-friendly tool that accurately calculates and displays prime factors for given input numbers. Implement robust error handling and optimize for performance where possible. Remember to write clear, concise code that other developers can easily understand and maintain.
+
+tasks:
+  - prompt: |
+      Implement the main entry point for the prime factorization utility. This file should:
+      1. Parse command-line arguments
+      2. Validate input
+      3. Call the prime factorization function
+      4. Display the results or error messages
+      
+      Public functions:
+      - main(): The main entry point of the program
+      - parse_arguments(): Parse and validate command-line arguments
+      - display_results(factors: List[int]): Format and print the prime factors
+    target: src/main.py
+    imports: []
+
+  - prompt: |
+      Implement the core prime factorization logic. This module should contain:
+      1. A function to check if a number is prime
+      2. A function to find the prime factors of a given number
+      3. Any helper functions needed for efficient factorization
+      
+      Public functions:
+      - is_prime(n: int) -> bool: Check if a number is prime
+      - prime_factors(n: int) -> List[int]: Find the prime factors of a number
+    target: src/factorization.py
+    imports: ["src/main.py"]
+
+  - prompt: |
+      Implement unit tests for the main module. Test cases should cover:
+      1. Argument parsing
+      2. Input validation
+      3. Result display formatting
+      
+      Ensure tests can run without external dependencies or user input.
+    target: tests/test_main.py
+    imports: ["src/main.py"]
+
+  - prompt: |
+      Implement unit tests for the factorization module. Test cases should cover:
+      1. Prime number checking
+      2. Prime factorization for various inputs (small, large, prime, composite)
+      3. Edge cases (1, 2, very large numbers)
+      
+      Ensure tests can run without external dependencies or user input.
+    target: tests/test_factorization.py
+    imports: ["src/factorization.py"]
+
+  - prompt: |
+      Create a README file with:
+      1. Project description and purpose
+      2. Installation instructions
+      3. Usage examples
+      4. Any dependencies or requirements
+      5. Brief explanation of the implementation
+    target: README.md
+    imports: ["src/main.py", "src/factorization.py"]
+
+  - prompt: |
+      Create a requirements.txt file listing any external dependencies required for the project. If no external libraries are used, create an empty file.
+    target: requirements.txt
+    imports: ["src/main.py", "src/factorization.py"]
+
+  - prompt: |
+      Create a Dockerfile for containerizing the application. Use the provided python-container.txt as a base.
+      Ensure the Dockerfile:
+      1. Uses an appropriate Python base image
+      2. Copies the necessary files into the container
+      3. Installs any required dependencies
+      4. Sets the entry point to run the prime factorization utility
+    target: Dockerfile
+    imports: ["lib:architectures/python-container.txt", "requirements.txt", "src/main.py"]
