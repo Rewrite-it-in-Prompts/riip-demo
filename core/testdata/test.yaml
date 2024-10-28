@@ -1,9 +1,0 @@
-tasks:
-- inputs:
-  - '-'
-  max-retries: 1
-  output-dir: testdata
-  pipeline:
-  - subprocess:
-    - python
-    - validator.py

@@ -1,6 +1,0 @@
-
-tasks:
-  - inputs: ["-"]
-    validator: validator.py
-    output-dir: ./testdata
-    max-retries: 1
