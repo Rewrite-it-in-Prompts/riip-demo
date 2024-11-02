@@ -1,10 +1,4 @@
 [ 
-    { "role": "user", "content": "Write some code" },
-    { "role": "assistant", "content": "Sure... here is... ```some code``` ... explanation" },
-    { "role": "user", "content": "Please output only the code." },
-    { "role": "assistant", "content": "```lang\nsome code```" },
-    { "role": "user", "content": "No, just the code please. The extra stuff hurts my eyes." },
-    { "role": "assistant", "content": "some code" },
-    { "role": "user", "content": "Thanks. From now on, when I ask for code, please output only the code." },
-    { "role": "assistant", "content": "ok" }
+    { "role": "user", "content": "From now on, always answer without any markdown or commentary. Never ask me questions, just give the code, even repeat the same code response if you have to. What's 2+2?" },
+    { "role": "assistant", "content": "4" }
 ]

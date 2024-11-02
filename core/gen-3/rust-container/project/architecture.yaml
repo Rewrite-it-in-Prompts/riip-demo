@@ -1,0 +1,252 @@
+filelist:
+- content: "mod args;\nmod aws_client;\nmod chat;\nmod code_gen;\nmod error;\nmod\
+    \ execute;\nmod files;\nmod types;\nmod yaml;\n\nuse crate::args::parse_args;\n\
+    use crate::chat::CodingChat;\nuse crate::code_gen::generate_code;\nuse crate::files::read_input_files;\n\
+    use std::process;\n\n#[tokio::main]\nasync fn main() {\n    let args = parse_args();\n\
+    \    let chat = CodingChat::new().await;\n    \n    eprintln!(\"Started {} {:?}\"\
+    , env!(\"CARGO_PKG_NAME\"), args);\n    \n    let input_text = match read_input_files(&args.input_files)\
+    \ {\n        Ok(text) => text,\n        Err(e) => {\n            eprintln!(\"\
+    Error reading input files: {}\", e);\n            process::exit(1);\n        }\n\
+    \    };\n\n    if let Err(e) = generate_code(&chat, &input_text, &args).await\
+    \ {\n        eprintln!(\"Error: {}\", e);\n        process::exit(1);\n    }\n\
+    }\n"
+  description: Entry point and argument parsing
+  path: src/main.rs
+- content: "use std::path::PathBuf;\nuse std::env;\n\n#[derive(Debug)]\npub struct\
+    \ Args {\n    pub input_files: Vec<String>,\n    pub output_dir: PathBuf,\n  \
+    \  pub language: String,\n    pub execute: Vec<String>,\n    pub max_retries:\
+    \ u32,\n}\n\npub fn parse_args() -> Args {\n    let args: Vec<String> = env::args().collect();\n\
+    \    let mut input_files = Vec::new();\n    let mut output_dir = PathBuf::new();\n\
+    \    let mut language = String::from(\"python\");\n    let mut execute = Vec::new();\n\
+    \    let mut max_retries = 1;\n    \n    let mut i = 1;\n    while i < args.len()\
+    \ {\n        match args[i].as_str() {\n            \"-o\" | \"--output\" => {\n\
+    \                i += 1;\n                output_dir = PathBuf::from(&args[i]);\n\
+    \            }\n            \"-l\" | \"--language\" => {\n                i +=\
+    \ 1;\n                language = args[i].clone();\n            }\n           \
+    \ \"-x\" | \"--execute\" => {\n                i += 1;\n                execute.push(args[i].clone());\n\
+    \            }\n            \"-n\" | \"--max-retries\" => {\n                i\
+    \ += 1;\n                max_retries = args[i].parse().unwrap_or(1);\n       \
+    \     }\n            _ => input_files.push(args[i].clone()),\n        }\n    \
+    \    i += 1;\n    }\n\n    if output_dir.as_os_str().is_empty() {\n        eprintln!(\"\
+    Error: Output directory (-o) is required\");\n        std::process::exit(1);\n\
+    \    }\n\n    if input_files.is_empty() {\n        eprintln!(\"Error: At least\
+    \ one input file is required\");\n        std::process::exit(1);\n    }\n\n  \
+    \  Args {\n        input_files,\n        output_dir,\n        language,\n    \
+    \    execute,\n        max_retries,\n    }\n}\n"
+  description: Command line argument parsing
+  path: src/args.rs
+- content: "use aws_sdk_bedrockruntime::{Client, Config};\nuse aws_config::timeout::TimeoutConfig;\n\
+    use aws_types::region::Region;\nuse std::time::Duration;\n\npub async fn create_client()\
+    \ -> Client {\n    let timeout_config = TimeoutConfig::builder()\n        .connect_timeout(Duration::from_secs(300))\n\
+    \        .read_timeout(Duration::from_secs(600))\n        .build();\n    \n  \
+    \  let config = aws_config::from_env()\n        .region(Region::new(\"us-west-2\"\
+    ))\n        .timeout_config(timeout_config)\n        .load()\n        .await;\n\
+    \        \n    Client::new(&config)\n}\n"
+  description: AWS Bedrock client setup and configuration
+  path: src/aws_client.rs
+- content: "use crate::aws_client::create_client;\nuse crate::error::Error;\nuse aws_sdk_bedrockruntime::primitives::Blob;\n\
+    use serde::{Deserialize, Serialize};\nuse std::time::Instant;\nuse uuid::Uuid;\n\
+    \n#[derive(Debug)]\npub struct CodingChat {\n    pub session: String,\n    pub\
+    \ model: String,\n    pub messages: Vec<Message>,\n}\n\n#[derive(Debug, Serialize,\
+    \ Deserialize, Clone)]\npub struct Message {\n    pub role: String,\n    pub content:\
+    \ String,\n}\n\n#[derive(Debug, Serialize)]\nstruct RequestConfig {\n    system:\
+    \ String,\n    messages: Vec<Message>,\n}\n\nimpl Default for RequestConfig {\n\
+    \    fn default() -> Self {\n        Self {\n            system: String::new(),\n\
+    \            messages: Vec::new(),\n        }\n    }\n}\n\nimpl CodingChat {\n\
+    \    pub async fn new() -> Self {\n        Self {\n            session: Uuid::new_v4().to_string(),\n\
+    \            model: \"anthropic.claude-v2\".to_string(),\n            messages:\
+    \ Vec::new(),\n        }\n    }\n\n    pub async fn invoke(&mut self, system_prompt:\
+    \ &str, user_prompt: &str, filetype: &str) \n        -> Result<(String, String,\
+    \ String, i32), Error> {\n        \n        let config = RequestConfig {\n   \
+    \         system: system_prompt.to_string(),\n            messages: self.messages.clone(),\n\
+    \        };\n\n        let start = Instant::now();\n        \n        let client\
+    \ = create_client().await;\n        let response = client\n            .invoke_model()\n\
+    \            .model_id(&self.model)\n            .body(serde_json::to_string(&config)?)\n\
+    \            .send()\n            .await?;\n\n        let response_body: Message\
+    \ = serde_json::from_slice(&response.body.as_ref())?;\n        \n        self.messages.push(Message\
+    \ {\n            role: \"user\".to_string(),\n            content: user_prompt.to_string(),\n\
+    \        });\n        self.messages.push(response_body.clone());\n\n        Ok((\n\
+    \            response_body.content,\n            String::new(),\n            String::new(),\n\
+    \            0,\n        ))\n    }\n}\n"
+  description: Chat session management
+  path: src/chat.rs
+- content: "use crate::args::Args;\nuse crate::chat::CodingChat;\nuse crate::error::Error;\n\
+    use crate::execute::execute_pipeline;\nuse crate::files::{get_file_extension,\
+    \ scan_output_directory};\nuse crate::types::{Architecture, FileInfo};\nuse crate::yaml::{generate_architecture,\
+    \ process_resumption, handle_error};\nuse std::fs;\nuse std::path::Path;\n\npub\
+    \ async fn generate_code(chat: &CodingChat, input_text: &str, args: &Args) ->\
+    \ Result<(), Error> {\n    fs::create_dir_all(&args.output_dir)?;\n    let arch_path\
+    \ = args.output_dir.join(\"architecture.yaml\");\n    \n    let arch_data = if\
+    \ arch_path.exists() {\n        eprintln!(\"{}: Found existing architecture.yaml\"\
+    , chat.session);\n        let arch_str = fs::read_to_string(&arch_path)?;\n  \
+    \      let arch: Architecture = serde_yaml::from_str(&arch_str)?;\n        \n\
+    \        let target_exts: Vec<String> = arch.filelist.iter()\n            .map(|f|\
+    \ get_file_extension(&f.path))\n            .collect();\n        \n        let\
+    \ existing_files = scan_output_directory(&args.output_dir, &target_exts)?;\n \
+    \       \n        let outputs = execute_pipeline(args, &args.output_dir).await?;\n\
+    \        let pipeline_summary = outputs.iter()\n            .enumerate()\n   \
+    \         .map(|(i, (stdout, stderr, rc))| {\n                format!(\"cmd{}:\
+    \ stdout={} stderr={} rc={}\", i, stdout, stderr, rc)\n            })\n      \
+    \      .collect::<Vec<_>>()\n            .join(\"\\n\");\n        \n        process_resumption(chat,\
+    \ input_text, &arch, &existing_files, &pipeline_summary).await?\n    } else {\n\
+    \        eprintln!(\"{}: Generating new architecture\", chat.session);\n     \
+    \   let arch = generate_architecture(chat, input_text).await?;\n        fs::write(&arch_path,\
+    \ serde_yaml::to_string(&arch)?)?;\n        arch\n    };\n\n    let mut retry_count\
+    \ = 0;\n    while retry_count <= args.max_retries {\n        for file_info in\
+    \ &arch_data.filelist {\n            let file_path = args.output_dir.join(&file_info.path);\n\
+    \            if let Some(parent) = file_path.parent() {\n                fs::create_dir_all(parent)?;\n\
+    \            }\n            \n            eprintln!(\"{}: Generating {}\", chat.session,\
+    \ file_info.path);\n            let content = generate_file(chat, file_info, &arch_data).await?;\n\
+    \            \n            fs::write(&file_path, content)?;\n            eprintln!(\"\
+    {}: Wrote {}\", chat.session, file_info.path);\n        }\n        \n        if\
+    \ !args.execute.is_empty() {\n            let outputs = execute_pipeline(args,\
+    \ &args.output_dir).await?;\n            for (i, (stdout, stderr, rc)) in outputs.iter().enumerate()\
+    \ {\n                let cmd = &args.execute[i];\n                eprintln!(\"\
+    {}: Executed '{}', rc={}\", chat.session, cmd, rc);\n                if *rc !=\
+    \ 0 {\n                    let error_data = handle_error(chat, &format!(\n   \
+    \                     \"Command '{}' failed:\\n{}\\n{}\", cmd, stdout, stderr\n\
+    \                    )).await?;\n                    fs::write(\n            \
+    \            args.output_dir.join(\"implementation.yaml\"),\n                \
+    \        serde_yaml::to_string(&error_data)?\n                    )?;\n      \
+    \              retry_count += 1;\n                    continue;\n            \
+    \    }\n            }\n            eprintln!(\"{}: All commands succeeded\", chat.session);\n\
+    \            return Ok(());\n        }\n        return Ok(());\n    }\n    \n\
+    \    eprintln!(\"{}: Max retries reached\", chat.session);\n    Err(Error::MaxRetries)\n\
+    }\n\nasync fn generate_file(chat: &CodingChat, file_info: &FileInfo, arch_data:\
+    \ &Architecture) \n    -> Result<String, Error> {\n    if let Some(content) =\
+    \ &file_info.content {\n        return Ok(content.clone());\n    }\n    \n   \
+    \ let system_prompt = format!(\n        \"Generate code for {}\\nDescription:\
+    \ {}\\nProject vision: {}\",\n        file_info.path, file_info.description, arch_data.vision\n\
+    \    );\n\n    let (code, _, _, _) = chat.invoke(\n        &system_prompt,\n \
+    \       \"Generate the file content\",\n        &get_file_extension(&file_info.path)\n\
+    \    ).await?;\n    \n    Ok(code)\n}\n"
+  description: Code generation orchestration
+  path: src/code_gen.rs
+- content: "use std::fmt;\n\n#[derive(Debug)]\npub enum Error {\n    Io(std::io::Error),\n\
+    \    Yaml(serde_yaml::Error),\n    Json(serde_json::Error),\n    Aws(aws_sdk_bedrockruntime::Error),\n\
+    \    MaxRetries,\n}\n\nimpl fmt::Display for Error {\n    fn fmt(&self, f: &mut\
+    \ fmt::Formatter<'_>) -> fmt::Result {\n        match self {\n            Error::Io(e)\
+    \ => write!(f, \"IO error: {}\", e),\n            Error::Yaml(e) => write!(f,\
+    \ \"YAML error: {}\", e),\n            Error::Json(e) => write!(f, \"JSON error:\
+    \ {}\", e),\n            Error::Aws(e) => write!(f, \"AWS error: {}\", e),\n \
+    \           Error::MaxRetries => write!(f, \"Maximum retries reached\"),\n   \
+    \     }\n    }\n}\n\nimpl From<std::io::Error> for Error {\n    fn from(err: std::io::Error)\
+    \ -> Self {\n        Error::Io(err)\n    }\n}\n\nimpl From<serde_yaml::Error>\
+    \ for Error {\n    fn from(err: serde_yaml::Error) -> Self {\n        Error::Yaml(err)\n\
+    \    }\n}\n\nimpl From<serde_json::Error> for Error {\n    fn from(err: serde_json::Error)\
+    \ -> Self {\n        Error::Json(err)\n    }\n}\n\nimpl From<aws_sdk_bedrockruntime::Error>\
+    \ for Error {\n    fn from(err: aws_sdk_bedrockruntime::Error) -> Self {\n   \
+    \     Error::Aws(err)\n    }\n}\n"
+  description: Error type definitions
+  path: src/error.rs
+- content: "use crate::args::Args;\nuse crate::error::Error;\nuse std::path::Path;\n\
+    use std::process::{Command, Stdio};\nuse tokio::io::{AsyncBufReadExt, BufReader};\n\
+    \npub async fn execute_pipeline(args: &Args, cwd: &Path) \n    -> Result<Vec<(String,\
+    \ String, i32)>, Error> {\n    let mut outputs = Vec::new();\n    \n    for cmd\
+    \ in &args.execute {\n        let mut command = Command::new(\"sh\");\n      \
+    \  command\n            .arg(\"-c\")\n            .arg(cmd)\n            .current_dir(cwd)\n\
+    \            .stdout(Stdio::piped())\n            .stderr(Stdio::piped());\n \
+    \       \n        let mut child = command.spawn()?;\n        \n        let stdout\
+    \ = child.stdout.take().unwrap();\n        let stderr = child.stderr.take().unwrap();\n\
+    \        \n        let mut stdout_reader = BufReader::new(stdout).lines();\n \
+    \       let mut stderr_reader = BufReader::new(stderr).lines();\n        \n  \
+    \      let mut stdout_data = Vec::new();\n        let mut stderr_data = Vec::new();\n\
+    \        \n        loop {\n            tokio::select! {\n                result\
+    \ = stdout_reader.next_line() => {\n                    match result {\n     \
+    \                   Ok(Some(line)) => {\n                            println!(\"\
+    {}\", line);\n                            stdout_data.push(line);\n          \
+    \              }\n                        Ok(None) => break,\n               \
+    \         Err(e) => return Err(Error::Io(e)),\n                    }\n       \
+    \         }\n                result = stderr_reader.next_line() => {\n       \
+    \             match result {\n                        Ok(Some(line)) => {\n  \
+    \                          eprintln!(\"{}\", line);\n                        \
+    \    stderr_data.push(line);\n                        }\n                    \
+    \    Ok(None) => break,\n                        Err(e) => return Err(Error::Io(e)),\n\
+    \                    }\n                }\n            }\n        }\n        \n\
+    \        let status = child.wait()?;\n        \n        outputs.push((\n     \
+    \       stdout_data.join(\"\\n\"),\n            stderr_data.join(\"\\n\"),\n \
+    \           status.code().unwrap_or(-1),\n        ));\n    }\n    \n    Ok(outputs)\n\
+    }\n"
+  description: Command execution handling
+  path: src/execute.rs
+- content: "use crate::error::Error;\nuse std::collections::HashMap;\nuse std::fs;\n\
+    use std::path::Path;\n\npub fn read_input_files(paths: &[String]) -> Result<String,\
+    \ Error> {\n    let mut combined = Vec::new();\n    \n    for path in paths {\n\
+    \        let content = if path == \"-\" {\n            use std::io::{self, Read};\n\
+    \            let mut buffer = String::new();\n            io::stdin().read_to_string(&mut\
+    \ buffer)?;\n            buffer\n        } else {\n            fs::read_to_string(path)?\n\
+    \        };\n        combined.push(content);\n    }\n    \n    Ok(combined.join(\"\
+    \\n\"))\n}\n\npub fn get_file_extension(path: &str) -> String {\n    Path::new(path)\n\
+    \        .extension()\n        .and_then(|ext| ext.to_str())\n        .map(|s|\
+    \ s.to_lowercase())\n        .unwrap_or_default()\n}\n\npub fn scan_output_directory(dir:\
+    \ &Path, target_exts: &[String]) \n    -> Result<HashMap<String, String>, Error>\
+    \ {\n    let mut files = HashMap::new();\n    \n    for entry in fs::read_dir(dir)?\
+    \ {\n        let entry = entry?;\n        let path = entry.path();\n        \n\
+    \        if path.is_file() {\n            if let Some(ext) = path.extension()\
+    \ {\n                if let Some(ext_str) = ext.to_str() {\n                 \
+    \   if target_exts.contains(&ext_str.to_lowercase()) {\n                     \
+    \   let rel_path = path.strip_prefix(dir)\n                            .unwrap()\n\
+    \                            .to_string_lossy()\n                            .into_owned();\n\
+    \                        let content = fs::read_to_string(&path)?;\n         \
+    \               files.insert(rel_path, content);\n                    }\n    \
+    \            }\n            }\n        }\n    }\n    \n    Ok(files)\n}\n"
+  description: File operations
+  path: src/files.rs
+- content: "use serde::{Deserialize, Serialize};\n\n#[derive(Debug, Serialize, Deserialize)]\n\
+    pub struct Architecture {\n    pub vision: String,\n    pub filelist: Vec<FileInfo>,\n\
+    }\n\n#[derive(Debug, Serialize, Deserialize)]\npub struct FileInfo {\n    pub\
+    \ path: String,\n    pub description: String,\n    #[serde(skip_serializing_if\
+    \ = \"Option::is_none\")]\n    pub content: Option<String>,\n}\n"
+  description: Common type definitions
+  path: src/types.rs
+- content: "use crate::chat::CodingChat;\nuse crate::error::Error;\nuse crate::types::{Architecture,\
+    \ FileInfo};\nuse std::collections::HashMap;\n\npub async fn generate_architecture(chat:\
+    \ &CodingChat, input_text: &str) \n    -> Result<Architecture, Error> {\n    let\
+    \ system_prompt = r#\"You are a software architect. Generate architecture.yaml\
+    \ for a multi-file project.\nExample format:\nvision: |\n  Project requirements\
+    \ and specifications\nfilelist:\n  - path: src/main.py\n    description: Main\
+    \ entry point\n    content: |\n      print('hello')  # Optional, for small files\n\
+    \  - path: src/lib.py\n    description: Core functionality\"#;\n\n    let (yaml_str,\
+    \ _, _, _) = chat.invoke(\n        system_prompt,\n        &format!(\"Generate\
+    \ architecture for:\\n{}\", input_text),\n        \"yaml\"\n    ).await?;\n  \
+    \  \n    Ok(serde_yaml::from_str(&yaml_str)?)\n}\n\npub async fn process_resumption(\n\
+    \    chat: &CodingChat,\n    input_text: &str,\n    arch_data: &Architecture,\n\
+    \    existing_files: &HashMap<String, String>,\n    pipeline_output: &str,\n)\
+    \ -> Result<Architecture, Error> {\n    let system_prompt = r#\"Review project\
+    \ state and generate YAML response:\nvision: |\n  Project status and needed changes\n\
+    filelist: []  # Empty if no changes needed, else same format as architecture.yaml\"\
+    #;\n\n    let user_prompt = format!(\n        \"Input:\\n{}\\nCurrent architecture:\
+    \ {}\\nFiles generated: {}\\nPipeline output: {}\",\n        input_text,\n   \
+    \     serde_yaml::to_string(arch_data)?,\n        serde_yaml::to_string(existing_files)?,\n\
+    \        pipeline_output\n    );\n\n    let (yaml_str, _, _, _) = chat.invoke(system_prompt,\
+    \ &user_prompt, \"yaml\").await?;\n    \n    Ok(serde_yaml::from_str(&yaml_str)?)\n\
+    }\n\npub async fn handle_error(chat: &CodingChat, error_msg: &str) -> Result<Architecture,\
+    \ Error> {\n    let system_prompt = r#\"Generate YAML response for error:\nimplementation-notes:\
+    \ |\n  Error analysis and fix strategy\nfilelist:\n  - path: file/to/fix.py\n\
+    \    description: Fix description\n    content: |\n      Fixed code\"#;\n\n  \
+    \  let (yaml_str, _, _, _) = chat.invoke(\n        system_prompt,\n        &format!(\"\
+    Fix error:\\n{}\", error_msg),\n        \"yaml\"\n    ).await?;\n    \n    Ok(serde_yaml::from_str(&yaml_str)?)\n\
+    }"
+  description: YAML handling functions
+  path: src/yaml.rs
+vision: 'Create a Rust implementation of the multi-file code generator system.
+
+  Key requirements:
+
+  - Split into multiple small files for maintainability
+
+  - Async/await for AWS Bedrock API calls
+
+  - YAML handling for architecture files
+
+  - File I/O operations
+
+  - Command execution
+
+  - Error handling and retries
+
+  - Logging to stderr
+
+  - Argument parsing
+
+  '

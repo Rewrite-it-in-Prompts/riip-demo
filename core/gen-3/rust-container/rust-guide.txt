@@ -1,0 +1,49 @@
+Your task: Rewrite this entire system (source and specs above) in Rust.
+Split the code into as many source files as possible, one function per file.
+
+# Here's the contents of base-prompt.json:
+[ 
+    { "role": "user", "content": "From now on, always answer without any markdown or commentary. Never ask me questions, just give the code, even repeat the same code response if you have to. What's 2+2?" },
+    { "role": "assistant", "content": "4" }
+]
+
+# Use the following for AWS Bedrock connectivity:
+
+    Use aws_sdk_bedrockruntime::primitives::Blob instead of aws_sdk_bedrockruntime::types::Blob for the correct import path
+
+    use aws_sdk_bedrockruntime::{Client, Config};
+    use aws_config::timeout::TimeoutConfig;
+    use aws_types::region::Region;
+
+    async fn create_client() -> Client {
+        let timeout_config = TimeoutConfig::builder()
+            .connect_timeout(std::time::Duration::from_secs(300))
+            .read_timeout(std::time::Duration::from_secs(600))
+            .build();
+        
+        let config = aws_config::from_env()
+            .region(Region::new("us-west-2"))
+            .timeout_config(timeout_config)
+            .load()
+            .await;
+            
+        Client::new(&config)
+    }
+
+    let config = RequestConfig {
+        system: system_prompt,
+        messages: self.messages.clone(),
+        ..DefaultConfig::default()
+    };
+
+    let start = std::time::Instant::now();
+    
+    let client = create_client().await;
+    let response = client
+        .invoke_model()
+        .model_id(&self.model)
+        .body(serde_json::to_string(&config)?)
+        .send()
+        .await?;
+
+# Cargo.toml (provided, do not modify):

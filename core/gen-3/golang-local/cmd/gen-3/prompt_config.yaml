@@ -1,0 +1,33 @@
+models:
+  - "anthropic.claude-3-haiku-20240307-v1:0"
+  - "anthropic.claude-3-5-sonnet-20241022-v2:0"
+  - "anthropic.claude-3-opus-20240229-v1:0"
+default_model: 1
+
+base_prompt:
+  - role: "user"
+    content: "From now on, always answer without any markdown or commentary. What's 2+2?"
+  - role: "assistant" 
+    content: "4"
+
+templates:
+  system_prompts:
+    default: "You are an expert developer. You deliver complete solutions without placeholders."
+    yaml: "Generate output in strict YAML format following the example structure."
+    
+  user_prompts:
+    architecture: |
+      Based on this input, generate architecture YAML:
+      %s
+    error_fix: |
+      Fix this error:
+      %s
+    file_gen: |
+      Generate file: %s
+      Description: %s
+      Project vision: %s
+
+aws:
+  region: "us-west-2"
+  read_timeout: 600
+  connect_timeout: 300

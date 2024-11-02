@@ -1,2 +1,5 @@
 __pycache__/
 .llm_logs/
+core/.llm_log
+gen-2-test
+target/

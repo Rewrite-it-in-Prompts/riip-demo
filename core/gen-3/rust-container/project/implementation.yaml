@@ -1,0 +1,143 @@
+---
+best-practice: '1. Always verify dependencies in Cargo.toml before implementation
+
+  2. Use tokio::process for async process handling
+
+  3. Properly handle AWS SDK types and error conversions
+
+  4. Consider Clone/Copy semantics early in design
+
+  5. Use builder pattern for complex struct initialization
+
+  '
+filelist:
+- content: '[package]
+
+    name = "gen-3"
+
+    version = "0.1.0"
+
+    edition = "2021"
+
+
+    [dependencies]
+
+    aws-sdk-bedrockruntime = "1.58.0"
+
+    aws-config = "1.1.7"
+
+    aws-types = "1.3.3"
+
+    serde = { version = "1.0.197", features = ["derive"] }
+
+    serde_json = "1.0.132"
+
+    serde_yaml = "0.9.34-deprecated"
+
+    tokio = { version = "1.39", features = ["full"] }
+
+    uuid = { version = "1.11.0", features = ["v4"] }
+
+    '
+  description: Update dependencies
+  path: Cargo.toml
+- content: "use crate::aws_client::create_client;\nuse crate::error::Error;\nuse aws_sdk_bedrockruntime::primitives::Blob;\n\
+    use serde::{Deserialize, Serialize};\nuse std::time::Instant;\nuse uuid::Uuid;\n\
+    \n#[derive(Debug, Clone)]\npub struct CodingChat {\n    pub session: String,\n\
+    \    pub model: String,\n    pub messages: Vec<Message>,\n}\n\n#[derive(Debug,\
+    \ Serialize, Deserialize, Clone)]\npub struct Message {\n    pub role: String,\n\
+    \    pub content: String,\n}\n\n#[derive(Debug, Serialize)]\nstruct RequestConfig\
+    \ {\n    system: String,\n    messages: Vec<Message>,\n}\n\nimpl Default for RequestConfig\
+    \ {\n    fn default() -> Self {\n        Self {\n            system: String::new(),\n\
+    \            messages: Vec::new(),\n        }\n    }\n}\n\nimpl CodingChat {\n\
+    \    pub async fn new() -> Self {\n        Self {\n            session: Uuid::new_v4().to_string(),\n\
+    \            model: \"anthropic.claude-v2\".to_string(),\n            messages:\
+    \ Vec::new(),\n        }\n    }\n\n    pub async fn invoke(&mut self, system_prompt:\
+    \ &str, user_prompt: &str, filetype: &str) \n        -> Result<(String, String,\
+    \ String, i32), Error> {\n        \n        let config = RequestConfig {\n   \
+    \         system: system_prompt.to_string(),\n            messages: self.messages.clone(),\n\
+    \        };\n\n        let client = create_client().await;\n        let json_body\
+    \ = serde_json::to_string(&config)?;\n        let blob = Blob::new(json_body.as_bytes());\n\
+    \        \n        let response = client\n            .invoke_model()\n      \
+    \      .model_id(&self.model)\n            .body(blob)\n            .send()\n\
+    \            .await?;\n\n        let response_body: Message = serde_json::from_slice(&response.body.as_ref())?;\n\
+    \        \n        self.messages.push(Message {\n            role: \"user\".to_string(),\n\
+    \            content: user_prompt.to_string(),\n        });\n        self.messages.push(response_body.clone());\n\
+    \n        Ok((\n            response_body.content,\n            String::new(),\n\
+    \            String::new(),\n            0,\n        ))\n    }\n}\n"
+  description: Fix AWS client and add Clone derive
+  path: src/chat.rs
+- content: "use crate::args::Args;\nuse crate::error::Error;\nuse std::path::Path;\n\
+    use tokio::process::Command;\nuse tokio::io::{BufReader, AsyncBufReadExt};\n\n\
+    pub async fn execute_pipeline(args: &Args, cwd: &Path) \n    -> Result<Vec<(String,\
+    \ String, i32)>, Error> {\n    let mut outputs = Vec::new();\n    \n    for cmd\
+    \ in &args.execute {\n        let mut child = Command::new(\"sh\")\n         \
+    \   .arg(\"-c\")\n            .arg(cmd)\n            .current_dir(cwd)\n     \
+    \       .stdout(std::process::Stdio::piped())\n            .stderr(std::process::Stdio::piped())\n\
+    \            .spawn()?;\n        \n        let stdout = child.stdout.take().unwrap();\n\
+    \        let stderr = child.stderr.take().unwrap();\n        \n        let mut\
+    \ stdout_lines = BufReader::new(stdout).lines();\n        let mut stderr_lines\
+    \ = BufReader::new(stderr).lines();\n        \n        let mut stdout_data = Vec::new();\n\
+    \        let mut stderr_data = Vec::new();\n        \n        loop {\n       \
+    \     tokio::select! {\n                result = stdout_lines.next_line() => {\n\
+    \                    match result {\n                        Ok(Some(line)) =>\
+    \ {\n                            println!(\"{}\", line);\n                   \
+    \         stdout_data.push(line);\n                        }\n               \
+    \         Ok(None) => break,\n                        Err(e) => return Err(Error::Io(e)),\n\
+    \                    }\n                }\n                result = stderr_lines.next_line()\
+    \ => {\n                    match result {\n                        Ok(Some(line))\
+    \ => {\n                            eprintln!(\"{}\", line);\n               \
+    \             stderr_data.push(line);\n                        }\n           \
+    \             Ok(None) => break,\n                        Err(e) => return Err(Error::Io(e)),\n\
+    \                    }\n                }\n            }\n        }\n        \n\
+    \        let status = child.wait().await?;\n        \n        outputs.push((\n\
+    \            stdout_data.join(\"\\n\"),\n            stderr_data.join(\"\\n\"\
+    ),\n            status.code().unwrap_or(-1),\n        ));\n    }\n    \n    Ok(outputs)\n\
+    }\n"
+  description: Fix process execution with tokio
+  path: src/execute.rs
+- content: "use std::fmt;\nuse aws_sdk_bedrockruntime::error::SdkError;\nuse aws_sdk_bedrockruntime::operation::invoke_model::InvokeModelError;\n\
+    \n#[derive(Debug)]\npub enum Error {\n    Io(std::io::Error),\n    Yaml(serde_yaml::Error),\n\
+    \    Json(serde_json::Error),\n    Aws(aws_sdk_bedrockruntime::Error),\n    AwsSdk(SdkError<InvokeModelError>),\n\
+    \    MaxRetries,\n}\n\nimpl fmt::Display for Error {\n    fn fmt(&self, f: &mut\
+    \ fmt::Formatter<'_>) -> fmt::Result {\n        match self {\n            Error::Io(e)\
+    \ => write!(f, \"IO error: {}\", e),\n            Error::Yaml(e) => write!(f,\
+    \ \"YAML error: {}\", e),\n            Error::Json(e) => write!(f, \"JSON error:\
+    \ {}\", e),\n            Error::Aws(e) => write!(f, \"AWS error: {}\", e),\n \
+    \           Error::AwsSdk(e) => write!(f, \"AWS SDK error: {}\", e),\n       \
+    \     Error::MaxRetries => write!(f, \"Maximum retries reached\"),\n        }\n\
+    \    }\n}\n\nimpl From<std::io::Error> for Error {\n    fn from(err: std::io::Error)\
+    \ -> Self {\n        Error::Io(err)\n    }\n}\n\nimpl From<serde_yaml::Error>\
+    \ for Error {\n    fn from(err: serde_yaml::Error) -> Self {\n        Error::Yaml(err)\n\
+    \    }\n}\n\nimpl From<serde_json::Error> for Error {\n    fn from(err: serde_json::Error)\
+    \ -> Self {\n        Error::Json(err)\n    }\n}\n\nimpl From<aws_sdk_bedrockruntime::Error>\
+    \ for Error {\n    fn from(err: aws_sdk_bedrockruntime::Error) -> Self {\n   \
+    \     Error::Aws(err)\n    }\n}\n\nimpl From<SdkError<InvokeModelError>> for Error\
+    \ {\n    fn from(err: SdkError<InvokeModelError>) -> Self {\n        Error::AwsSdk(err)\n\
+    \    }\n}"
+  description: Update error handling for AWS SDK
+  path: src/error.rs
+immediate-fix: '1. Add uuid dependency to Cargo.toml
+
+  2. Update AWS imports to use aws-sdk-bedrockruntime primitives
+
+  3. Fix process I/O to use tokio::process instead of std::process
+
+  4. Add Clone derive for CodingChat and update function signatures
+
+  5. Fix error type to handle AWS SDK errors properly
+
+  '
+root-cause: 'Several critical issues in the Rust implementation:
+
+  1. Missing dependencies in Cargo.toml for uuid
+
+  2. Incorrect AWS types import path
+
+  3. Incorrect handling of AWS Bedrock request/response types
+
+  4. Incorrect async I/O usage in process execution
+
+  5. Mutable borrowing issues with CodingChat
+
+  '
